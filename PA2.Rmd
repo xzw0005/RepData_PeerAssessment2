@@ -1,0 +1,169 @@
+---
+title: 'Reproducible Research: Peer Assessment 2'
+author: "xzw0005"
+date: "Saturday, July 18, 2015"
+output: pdf_document
+subtitle: Impact of Severe Weather Events on Public Health and Economy in the United States
+---
+
+## Synopsis
+In this report, we aim to analyze the impact of different severe weather events on population health as well as economy across the United States. By exploring the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database, we conclude that across the United States,: 
+
+* **Excessive heat**, **tornado** and **flood** are the most harmful severe weather events with respect to population health, and 
+
+* **Flood**, **drought** and **hurricane/typhoon** are among the events which have the greatest economic consequences.
+
+## Data Processing
+The data comes from the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database. This database tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage.
+```{r loadData, cache = TRUE}
+if (! "StormData" %in% ls()) {
+  if (!file.exists("repdata-data-StormData.csv.bz2")) {
+    download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2", destfile = "./repdata-data-StormData.csv.bz2")
+  }
+  StormData = read.csv(bzfile("repdata-data-StormData.csv.bz2"))
+}
+str(StormData)
+```
+
+There are 902297 observations with 37 variables in total. The events in the database start in the year 1950 and end in November 2011. In the earlier years of the database there are generally fewer events recorded, most likely due to a lack of good records.
+
+```{r timeHist, warning=FALSE, cache = TRUE}
+StormData$year <- as.numeric(format(as.Date(StormData$BGN_DATE, format = "%m/%d/%Y %H:%M:%S"), "%Y"))
+library(ggplot2)
+g = ggplot(StormData, aes(x = year))
+g + geom_histogram(binwidth = 3, aes(fill = ..count..))
+```
+
+According to the histogram over time, we see that the recorded data significantly increased from the year around 1995. Since more recent years should be considered more complete, we would use the subset of the data since the year 1995.
+
+In this project, we mainly focus on the impact of weather events on population health and economy, thus choose 7 relevant variables, they are:
+
+* **EVTYPE:** Type of event
+
+* **FATALITIES:** Number of fatalities
+
+* **INJURIES:** Number of injuries
+
+* **PROPDMG:** Amount of property damage in orders of magnitude and hence economic damage in USD
+
+* **PROPDMGEXP:** Order of magnitude for property damage (e.g. K for thousands)
+
+* **CROPDMG:** Amount of crop damage in orders of magnitude and hence economic damage in USD
+
+* **CROPDMGEXP:** Order of magnitude for crop damage (e.g. M for millions)
+```{r eventType, cache = TRUE}
+mydata = StormData[StormData$year >= 1995, c("EVTYPE", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP", "CROPDMG", "CROPDMGEXP")]
+str(mydata)
+```
+
+Therefore, we have obtained the much smaller dataset that we will use. The data contains 681500 observations, although the starting year becomes 1995, it still contains more that 75% of the observations. Note that there are 985 factor levels of different event types in the dataset. However, the [National Weather Service Storm Data Documentation](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf) describes only 48 types of events (see Section 7, "Event Types", P18-P92). Thus, the event types worth paying much attention. By carefully inspection of the data, we notice that there are several reasons  cause so many levels, such as abbreviation, misspelling, different expression, etc. For example, the "FLOOD" might be abbreviated as "FLD", the "FOG" could be misspelled as "VOG", the "STORM" might be misspelled as "STROM", the "AVALANCHE" might be misspelled as "AVALANCE", the winter weather might be expressed as "WINTER" OR "WINTRY" the "THUNDER" might be spelled as "THUNDER", "THUNDERE", etc. At beginning, we are trying to solve this problem by using regular expression. However, the types are quite complicated to deal with. For example, "Marine Thunderstorm Wind" and "Thunderstorm Wind" are totally different types of weather events, where the former is with designator Marine, and the latter is defined as County/Parish (i.e., local). So dealing with the event type names would be our future work.
+
+Another thing needs to be take care of before doing the analysis is that we must take into account the order of magnitude of property damage and crop damage. 
+```{r uniqExp, cache = TRUE}
+unique(mydata$PROPDMGEXP)
+unique(mydata$CROPDMGEXP)
+```
+
+Let H = hundreds, K = thousands, M = millions, B = billions. Then we could obtain the damage values for both property and crop.
+
+```{r getVal, cache = TRUE}
+mydata$PROPDMGEXP = as.character(mydata$PROPDMGEXP)
+mydata$PROPDMGEXP[mydata$PROPDMGEXP == NA] = 0
+mydata$PROPDMGEXP[mydata$PROPDMGEXP == "B"] = 9
+mydata$PROPDMGEXP[mydata$PROPDMGEXP == "M"] = 6
+mydata$PROPDMGEXP[mydata$PROPDMGEXP == "m"] = 6
+mydata$PROPDMGEXP[mydata$PROPDMGEXP == "K"] = 3
+mydata$PROPDMGEXP[mydata$PROPDMGEXP == "h"] = 2
+mydata$PROPDMGEXP[mydata$PROPDMGEXP == "H"] = 2
+mydata$PROPDMGEXP[mydata$PROPDMGEXP == ""] = 0
+mydata$PROPDMGEXP[mydata$PROPDMGEXP == "+"] = 0
+mydata$PROPDMGEXP[mydata$PROPDMGEXP == "-"] = 0
+mydata$PROPDMGEXP[mydata$PROPDMGEXP == "?"] = 0
+
+mydata$PropDmgVal = mydata$PROPDMG * (10 ^ as.numeric(mydata$PROPDMGEXP))
+
+mydata$CROPDMGEXP = as.character(mydata$CROPDMGEXP)
+mydata$CROPDMGEXP[mydata$CROPDMGEXP == NA] = 0
+mydata$CROPDMGEXP[mydata$CROPDMGEXP == ""] = 0
+mydata$CROPDMGEXP[mydata$CROPDMGEXP == "?"] = 0
+mydata$CROPDMGEXP[mydata$CROPDMGEXP == "B"] = 9
+mydata$CROPDMGEXP[mydata$CROPDMGEXP == "M"] = 6
+mydata$CROPDMGEXP[mydata$CROPDMGEXP == "m"] = 6
+mydata$CROPDMGEXP[mydata$CROPDMGEXP == "K"] = 3
+str(mydata)
+
+mydata$CropDmgVal = mydata$CROPDMG * (10 ^ as.numeric(mydata$CROPDMGEXP))
+```
+
+## Results  
+### Most harmful events with respect to population health
+
+To begin our analysis for the most harmful events with respect to population health, we are about to aggregate the number of fatalities and injuries by the type of severe weather events. 
+
+```{r healthAggregate, cache = TRUE}
+#fatalities = aggregate(mydata$FATALITIES, by = list(mydata$EVTYPE), FUN = "sum")
+fatalities = aggregate(FATALITIES ~ EVTYPE, data = mydata, FUN = sum)
+fatalities = fatalities[order(-fatalities$FATALITIES), ]
+head(fatalities)
+injuries = aggregate(INJURIES ~ EVTYPE, data = mydata, FUN = sum)
+injuries = injuries[order(-injuries$INJURIES), ]
+head(injuries)
+```
+
+We can see from the above the top six severe weather events causing the largest number of fatalities and injuries, respectively. Now, let's visualize it via barplots.
+
+```{r healthPlots, warning=FALSE, cache = TRUE}
+library(ggplot2)
+library(gridExtra)
+
+fatalPlot = ggplot(data = head(fatalities), aes(x = EVTYPE, y = FATALITIES))
+fatalPlot = fatalPlot + geom_bar(stat="identity") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, face = "bold")) +
+  ggtitle("Top Severe Weather Events\n Causing Fatalities\n in the U.S. (1995-2001)") +
+  xlab("Type of Severe Weather") + ylab("Total Number of Fatilities")
+
+injurePlot = ggplot(data = head(injuries), aes(x = EVTYPE, y = INJURIES)) + geom_bar(stat="identity")
+injurePlot = injurePlot + theme(axis.text.x = element_text(angle = 45, hjust = 1, face = "bold")) +
+  ggtitle("Top Severe Weather Events\n Causing Injuries\n in the U.S. (1995-2001)") +
+  xlab("Type of Severe Weather") + ylab("Total Number of Fatilities")
+
+grid.arrange(fatalPlot, injurePlot, ncol=2)
+
+```  
+
+According to the above pair of histograms, we could see that **excessive heat** and **tornado** cause most *fatalities*, while **tornato** and **flood** cause most *injuries* in the United States from 1995 to 2011. Therefore, we conclude that **excessive heat**, **tornado** and **flood** are the most harmful severe weather events with respect to population health.
+
+
+### Which types of events have the greatest economic consequences
+
+To begin our analysis for the event types have the greatest economic consequences, we are about to aggregate the value (in U.S. $) of damage and loss by the type of severe weather events. 
+
+```{r econAggregate, cache = TRUE}
+
+propertyDamage = aggregate(PropDmgVal ~ EVTYPE, data = mydata, FUN = sum)
+propertyDamage = propertyDamage[order(-propertyDamage$PropDmgVal), ]
+head(propertyDamage)
+
+cropDamage = aggregate(CropDmgVal ~ EVTYPE, data = mydata, FUN = sum)
+cropDamage = cropDamage[order(-cropDamage$CropDmgVal), ]
+head(cropDamage)
+```
+
+We can see from the above the top six severe weather events causing the most economic damage on property and crop, respectively. Now, let's visualize it via barplots.
+
+```{r econPlots, warning=FALSE, cache = TRUE}
+propPlot = ggplot(data = head(propertyDamage), aes(x = EVTYPE, y = PropDmgVal))
+propPlot = propPlot + geom_bar(stat="identity") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, face = "bold")) +
+  ggtitle("Top Severe Weather Events\n Causing Most Property Damage \n in the U.S. (1995-2001)") +
+  xlab("Type of Severe Weather") + ylab("Total Property Damage ($)")
+
+cropPlot = ggplot(data = head(cropDamage), aes(x = EVTYPE, y = CropDmgVal)) + geom_bar(stat="identity")
+cropPlot = cropPlot + theme(axis.text.x = element_text(angle = 45, hjust = 1, face = "bold")) +
+  ggtitle("Top Severe Weather Events\n Causing Most Crop Damage\n in the U.S. (1995-2001)") +
+  xlab("Type of Severe Weather") + ylab("Total Crop Damage ($)")
+
+grid.arrange(propPlot, cropPlot, ncol=2)
+```  
+
+According to the above pair of histograms, we could see that that **flood** and **hurricane/typhoon** cause most *property damage*, while **drought** and **flood** cause most *crop damage* in the United States from 1995 to 2011. Therefore, we conclude that **flood**, **drought** and **hurricane/typhoon** are among the events which have the greatest economic consequences.
