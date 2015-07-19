@@ -1,6 +1,6 @@
 ---
 title: 'Reproducible Research: Peer Assessment 2'
-author: "Xing Wang"
+author: "xzw0005"
 date: "Saturday, July 18, 2015"
 output: pdf_document
 subtitle: Impact of Severe Weather Events on Public Health and Economy in the United States
