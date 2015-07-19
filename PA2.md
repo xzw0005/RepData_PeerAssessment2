@@ -1,12 +1,12 @@
 ---
-  title: 'Reproducible Research: Peer Assessment 2'
+title: 'Reproducible Research: Peer Assessment 2'
 author: "Xing Wang"
 date: "Saturday, July 18, 2015"
 output: pdf_document
 subtitle: Impact of Severe Weather Events on Public Health and Economy in the United States
 ---
   
-  ## Synopsis
+## Synopsis
   In this report, we aim to analyze the impact of different severe weather events on population health as well as economy across the United States. By exploring the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database, we conclude that across the United States,: 
 
 * **Excessive heat**, **tornado** and **flood** are the most harmful severe weather events with respect to population health, and 
